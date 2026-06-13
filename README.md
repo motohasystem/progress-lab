@@ -10,13 +10,16 @@
 
 ## デモを見る
 
-[`progress-lab/index.html`](progress-lab/index.html) を開くと全バリエーションの
-一覧から各デモへ飛べる。ES Modules を使うため、ファイル直開きではなくローカル
-サーバー経由で開くこと(センサー機能は HTTPS が必要)。
+**🔗 ライブデモ: https://motohasystem.github.io/progress-lab/**
+
+上記のランディングページから全バリエーションの各デモへ飛べる。
+
+ローカルで動かす場合は、ES Modules を使うためファイル直開きではなくローカル
+サーバー経由で開くこと(傾きセンサー機能は HTTPS が必要)。
 
 ```bash
-# 例: リポジトリ直下で
-npx serve progress-lab
+# 例: progress-lab/ ディレクトリで
+npx serve .
 # → http://localhost:3000/index.html
 ```
 
@@ -24,8 +27,8 @@ npx serve progress-lab
 
 | 名前 | 状態 | 概要 |
 |---|---|---|
-| [water](progress-lab/variants/water/) — 水位型 | ✅ 完成 | 粒子物理(Matter.js)で水滴が注がれ、水位=進捗。端末の傾きで水面が揺れ、手描きの障害物で水滴の流路を作って遊べる。 |
-| [tnt](progress-lab/variants/tnt/) — TNT爆破型 | ✅ 完成 | 実進捗の分だけTNTが土の地形に降り積もり、タップで着火→誘爆チェーン。爆発が地面も掘る採掘ゲーム。 |
+| [water](https://motohasystem.github.io/progress-lab/variants/water/demo.html) — 水位型 | ✅ 完成 | 粒子物理(Matter.js)で水滴が注がれ、水位=進捗。端末の傾きで水面が揺れ、手描きの障害物で水滴の流路を作って遊べる。 |
+| [tnt](https://motohasystem.github.io/progress-lab/variants/tnt/demo.html) — TNT爆破型 | ✅ 完成 | 実進捗の分だけTNTが土の地形に降り積もり、タップで着火→誘爆チェーン。爆発が地面も掘る採掘ゲーム。 |
 | stack — 積層ビルド | 💡 構想 | 処理ステップ=レイヤーが積み上がる。CSS 3D transform のみで依存ゼロ。 |
 | orbit — 軌道吸収 | 💡 構想 | 残タスクの粒子が軌道を周回し、処理されると中心核へ螺旋を描いて吸収される。 |
 | terrain — 地形生成 | 💡 構想 | 進捗に応じてワイヤーフレームの山が隆起する。長時間処理向き。 |
@@ -36,11 +39,11 @@ npx serve progress-lab
 
 ## 共通API
 
-全バリエーションは [`core/progress-base.js`](progress-lab/core/progress-base.js) の
+全バリエーションは [`core/progress-base.js`](core/progress-base.js) の
 `ProgressBase`(`HTMLElement` 派生)を基底とし、次の契約を満たす。
 
 ```html
-<script type="module" src="progress-lab/variants/water/water-progress.js"></script>
+<script type="module" src="variants/water/water-progress.js"></script>
 <water-progress id="p"></water-progress>
 
 <script>
