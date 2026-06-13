@@ -13,7 +13,7 @@
  *     転がり込む → 掘り進めながらTNTを誘導する採掘ゲームになる。
  *     土は風景であり進捗には計上されない(TNTの消滅だけが進捗)。
  *   - 放置しても各ブロックは3.5〜7秒で自然発火するため、進捗は必ず流れる。
- *   - 完了フラッシュ: value=100 後、残ブロックを一斉点火してフィナーレ。
+ *   - 完了フィナーレ: value=100 到達の瞬間、残ブロックをすべて即着火して一斉爆発。
  *
  * 使い方:
  *   <script type="module" src="variants/tnt/tnt-progress.js"></script>
@@ -24,7 +24,6 @@
  *   value / height / demo("smooth"|"step") / duration
  *   block-gain   1ブロックあたりの進捗% (default 0.625 → 全160個)
  *   dirt-fill    土を積む高さの比率 (default 0.5 = 水槽の半分)
- *   flush-delay  完了フラッシュまでの猶予ms (default 2500)
  *
  * プロパティ:
  *   .value / .detonatedValue
@@ -105,14 +104,12 @@ class TntProgress extends ProgressBase {
 
   blockGain = 0.625;
   dirtFill = 0.5;
-  flushDelay = 2500;
   steps = DEFAULT_STEPS;
   /** 進捗とは独立した任意の一行コメント。"xxxをしています…" 等を即時表示 */
   note = "";
 
   #detonated = 0;
   #spawned = 0;
-  #releaseDoneAt = 0;
   #lastSpawn = 0;
   #demoTimer = 0;
 
@@ -147,8 +144,6 @@ class TntProgress extends ProgressBase {
       this.blockGain = parseFloat(this.getAttribute("block-gain")) || this.blockGain;
     if (this.hasAttribute("dirt-fill"))
       this.dirtFill = clamp(parseFloat(this.getAttribute("dirt-fill")) || this.dirtFill, 0, 0.8);
-    if (this.hasAttribute("flush-delay"))
-      this.flushDelay = parseFloat(this.getAttribute("flush-delay")) || this.flushDelay;
 
     this.$cv.addEventListener("pointerdown", (e) => this.#onTap(e));
 
@@ -198,7 +193,6 @@ class TntProgress extends ProgressBase {
     this.value = 0;
     this.#detonated = 0;
     this.#spawned = 0;
-    this.#releaseDoneAt = 0;
     this.#demoTimer = 0;
     this.#clearBlocks();
     this.#particles = [];
@@ -216,7 +210,6 @@ class TntProgress extends ProgressBase {
     if (v < prev - 1e-6) {
       this.#detonated = Math.min(this.#detonated, v);
       this.#spawned = v;
-      this.#releaseDoneAt = 0;
       this.#clearBlocks();
       if (v < 100) this.resetCompleted();
     }
@@ -399,8 +392,11 @@ class TntProgress extends ProgressBase {
     const { w, h, vx, vy, vw, vh } = this.#vessel();
     if (vw < 10 || vh < 10) return;
 
-    // ---- 投下: spawned が value に追いつくまで(ペース制限)
-    if (this.#spawned < this.value && now - this.#lastSpawn > SPAWN_INTERVAL) {
+    // ---- 投下: spawned が value に追いつくまで。
+    //      通常は1フレーム1個のペース制限。100%到達後は残りを一気に投下して即フィナーレへ。
+    let spawnBudget = this.value >= 100 ? 9999 : 1;
+    while (this.#spawned < this.value - 1e-9 && spawnBudget-- > 0 &&
+           (this.value >= 100 || now - this.#lastSpawn > SPAWN_INTERVAL)) {
       this.#lastSpawn = now;
       this.#spawned += this.blockGain;
       const body = Bodies.rectangle(
@@ -433,15 +429,10 @@ class TntProgress extends ProgressBase {
       if (this.#blocks.includes(blk)) this.#explode(blk, now);
     }
 
-    // ---- 完了フラッシュ: 残ブロック一斉点火のフィナーレ
-    if (this.value >= 100 && this.#spawned >= 100 - 1e-9) {
-      if (!this.#releaseDoneAt) this.#releaseDoneAt = now;
-      if (now - this.#releaseDoneAt > this.flushDelay) {
-        for (const blk of this.#blocks) this.#ignite(blk, Math.random() * 600);
-      }
+    // ---- 完了フィナーレ: 100%到達の瞬間、残ブロックをすべて即着火して一斉爆発
+    if (this.value >= 100) {
+      for (const blk of this.#blocks) this.#ignite(blk, Math.random() * 90);
       if (this.#blocks.length === 0 && this.#detonated > 99.5) this.#detonated = 100;
-    } else {
-      this.#releaseDoneAt = 0;
     }
     if (this.#detonated >= 100) this.emitComplete();
 
