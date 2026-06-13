@@ -20,9 +20,10 @@
  *   duration     demoモードの所要ms (default 16000)
  *   drop-gain    1粒あたりの進捗% (default 0.09)
  *   flush-delay  完了後の強制着水までの猶予ms (default 3000)
+ *   duck         指定すると水面にアヒルを1匹浮かべる
  *
  * プロパティ/メソッド:
- *   .value / .landedValue / .tilt
+ *   .value / .landedValue / .tilt / .duck
  *   .steps  進捗しきい値ごとのラベル [{label, until}, …]
  *   .note   進捗とは独立した任意の一行コメント("xxxをしています…")
  *   .reset()  .clearObstacles()  .enableTiltSensor()(ユーザー操作内で呼ぶこと)
@@ -174,6 +175,7 @@ class WaterProgress extends ProgressBase {
   #sh = new Float32Array(N);
   #sv = new Float32Array(N);
   #bubbles = [];
+  #duck = null;          // { x, vx, phase, init } — 水面に浮かぶアヒル(任意)
 
   #raf = 0;
   #last = 0;
@@ -202,6 +204,7 @@ class WaterProgress extends ProgressBase {
       this.dropGain = parseFloat(this.getAttribute("drop-gain")) || this.dropGain;
     if (this.hasAttribute("flush-delay"))
       this.flushDelay = parseFloat(this.getAttribute("flush-delay")) || this.flushDelay;
+    if (this.hasAttribute("duck")) this.duck = true;
 
     const hasToolbar = this.hasAttribute("toolbar");
     this.$toolbar.classList.toggle("hidden", !hasToolbar);
@@ -258,6 +261,15 @@ class WaterProgress extends ProgressBase {
     this.#tilt = clamp(Number(deg) || 0, -35, 35);
   }
 
+  /** 水面に浮かぶアヒルの表示。true で1匹浮かべる */
+  get duck() {
+    return !!this.#duck;
+  }
+  set duck(on) {
+    if (on) this.#duck ??= { x: 0, vx: 0, phase: 0, init: false };
+    else this.#duck = null;
+  }
+
   /** 進捗・水・粒をすべて初期状態に戻す(障害物は残す) */
   reset() {
     this.value = 0;
@@ -269,6 +281,7 @@ class WaterProgress extends ProgressBase {
     this.#sh.fill(0);
     this.#sv.fill(0);
     this.#bubbles = [];
+    if (this.#duck) this.#duck.init = false; // 水位リセットに合わせて底へ戻す
     this.resetCompleted();
   }
 
@@ -593,6 +606,19 @@ class WaterProgress extends ProgressBase {
       return b.y > surfY(b.x) + this.#sh[idx] + 2;
     });
 
+    // ---- アヒル(水面に浮かべる): 傾きで低い側へ漂い、波で上下する
+    if (this.#duck) {
+      const d = this.#duck;
+      if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
+      const half = clamp(vw * 0.13, 30, 52) * 0.5;
+      d.vx += Math.sin(tiltRad) * 0.22 * dt;  // 重力のx成分で低い側へ
+      d.vx *= Math.pow(0.9, dt);              // 水の抵抗
+      d.x += d.vx * dt;
+      if (d.x < vx + half + 4) { d.x = vx + half + 4; d.vx = Math.abs(d.vx) * 0.3; }
+      else if (d.x > vx + vw - half - 4) { d.x = vx + vw - half - 4; d.vx = -Math.abs(d.vx) * 0.3; }
+      d.phase += 0.06 * dt;
+    }
+
     this.#render(w, h, vx, vy, vw, vh, cx, baseY, fillH, surfY);
     this.$stage.classList.toggle("done", this.#landed >= 100);
   }
@@ -690,6 +716,10 @@ class WaterProgress extends ProgressBase {
         ctx.fill();
       }
     }
+
+    // アヒル(水面に浮かぶ)
+    if (this.#duck) this.#drawDuck(ctx, vx, vw, surfY);
+
     ctx.restore();
 
     // 注ぎ口
@@ -749,6 +779,77 @@ class WaterProgress extends ProgressBase {
       fx.fill();
     }
     fx.restore();
+  }
+
+  /** 水面に乗るアヒルを描く(波の高さ・傾きに追従) */
+  #drawDuck(ctx, vx, vw, surfY) {
+    const d = this.#duck;
+    const s = clamp(vw * 0.13, 30, 52);          // アヒルのサイズ基準
+    const x = clamp(d.x, vx + s * 0.5, vx + vw - s * 0.5);
+    const idx = clamp(Math.round(((x - vx) / vw) * (N - 1)), 0, N - 1);
+
+    // 局所的な水面の傾き(全体傾き + 波)に合わせて姿勢を傾ける
+    const il = clamp(idx - 2, 0, N - 1), ir = clamp(idx + 2, 0, N - 1);
+    const xl = vx + (il / (N - 1)) * vw, xr = vx + (ir / (N - 1)) * vw;
+    const yl = surfY(xl) + this.#sh[il], yr = surfY(xr) + this.#sh[ir];
+    const angle = Math.atan2(yr - yl, xr - xl) * 0.85;
+    const surf = surfY(x) + this.#sh[idx];
+    const bob = Math.sin(d.phase) * 1.2;
+    const dir = d.vx < -0.05 ? -1 : 1;           // 進む向きを向く
+
+    ctx.save();
+    ctx.translate(x, surf - s * 0.18 + bob);
+    ctx.rotate(angle);
+    ctx.scale(dir, 1);
+
+    // 喫水線の接触影
+    ctx.fillStyle = "rgba(40,40,80,.18)";
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.16, s * 0.5, s * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 体
+    ctx.fillStyle = "#FFD54A";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.5, s * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 尾
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.40, -s * 0.02);
+    ctx.lineTo(-s * 0.62, -s * 0.20);
+    ctx.lineTo(-s * 0.38, -s * 0.16);
+    ctx.closePath();
+    ctx.fill();
+    // 腹側の陰影
+    ctx.fillStyle = "#F2C237";
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.12, s * 0.46, s * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 翼
+    ctx.fillStyle = "#F8CB3E";
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.02, 0, s * 0.22, s * 0.16, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    // 頭
+    ctx.fillStyle = "#FFD54A";
+    ctx.beginPath();
+    ctx.arc(s * 0.34, -s * 0.36, s * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+    // くちばし
+    ctx.fillStyle = "#FF9B40";
+    ctx.beginPath();
+    ctx.moveTo(s * 0.54, -s * 0.40);
+    ctx.lineTo(s * 0.84, -s * 0.34);
+    ctx.lineTo(s * 0.54, -s * 0.28);
+    ctx.closePath();
+    ctx.fill();
+    // 目
+    ctx.fillStyle = "#2A2740";
+    ctx.beginPath();
+    ctx.arc(s * 0.40, -s * 0.43, s * 0.045, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 }
 
