@@ -207,9 +207,14 @@ class TntProgress extends ProgressBase {
     this.resetCompleted();
   }
 
-  onValueChanged(v) {
-    if (v < this.#spawned - 1e-6) {
-      this.#detonated = v;
+  /** 実進捗が外から巻き戻された場合のみスクラブ扱いで同期 */
+  onValueChanged(v, prev) {
+    // 巻き戻りは「直前の value より下がった」で判定する。
+    // #spawned は blockGain 刻みで value をわずかに先行するため、
+    // 「v < #spawned」で見ると なめらか進捗で毎フレーム誤検知し、
+    // 投下直後のTNTを clearBlocks() で消してしまう(=落下しない)。
+    if (v < prev - 1e-6) {
+      this.#detonated = Math.min(this.#detonated, v);
       this.#spawned = v;
       this.#releaseDoneAt = 0;
       this.#clearBlocks();

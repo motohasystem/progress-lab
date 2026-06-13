@@ -302,9 +302,12 @@ class WaterProgress extends ProgressBase {
   }
 
   /** 実進捗が外から巻き戻された場合はスクラブ扱いで同期 */
-  onValueChanged(v) {
-    if (v < this.#spawned - 1e-6) {
-      this.#landed = v;
+  onValueChanged(v, prev) {
+    // 巻き戻りは「直前の value より下がった」で判定する。
+    // #spawned は dropGain 刻みで value をわずかに先行するため、
+    // 「v < #spawned」で見ると なめらか進捗で誤検知しうる。
+    if (v < prev - 1e-6) {
+      this.#landed = Math.min(this.#landed, v);
       this.#spawned = v;
       this.#releaseDoneAt = 0;
       this.#clearDrops();
