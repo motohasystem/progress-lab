@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>progress-lab — プログレスバー代替表現コレクション</title>
+<style>
+  body {
+    margin: 0; min-height: 100vh;
+    background: radial-gradient(1200px 600px at 50% -10%, #221C4D, #161330);
+    color: #EDEAFB; font-family: 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px 48px;
+  }
+  main { width: 100%; max-width: 640px; }
+  .eyebrow { font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: .25em; color: #FFB454; }
+  h1 { font-size: 24px; font-weight: 600; margin: 6px 0 6px; }
+  .lead { font-size: 13px; color: #8F89BC; line-height: 1.8; margin: 0 0 24px; }
+  .card {
+    display: block; text-decoration: none; color: inherit;
+    background: #1E1A3D; border: 1px solid #332D63; border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 12px;
+    transition: border-color .15s;
+  }
+  a.card:hover { border-color: rgba(255,180,84,.5); }
+  .card h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  .card p { font-size: 12px; color: #8F89BC; margin: 0; line-height: 1.7; }
+  .tag {
+    font-family: ui-monospace, monospace; font-size: 10px; padding: 2px 8px;
+    border-radius: 999px; font-weight: normal;
+  }
+  .tag.ready { border: 1px solid rgba(123,227,168,.4); color: #7BE3A8; }
+  .tag.idea { border: 1px solid #332D63; color: #8F89BC; }
+  code { background: #161330; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">PROGRESS LAB</div>
+  <h1>プログレスバー代替表現コレクション</h1>
+  <p class="lead">
+    どのバリエーションも <code>el.value = 実進捗</code> を流し込むだけの共通API。
+    表示は実進捗に正直に従い、遊びは演出側にだけ宿る。
+  </p>
+
+  <a class="card" href="variants/water/demo.html">
+    <h2>water — 水位型 <span class="tag ready">完成</span></h2>
+    <p>粒子物理(Matter.js)で水滴が注がれ水位=進捗。端末の傾きで水面が揺れ、
+    手描きの障害物で水滴の流路を作って遊べる。実進捗→放出→着水→水位の正直設計。</p>
+  </a>
+
+  <a class="card" href="variants/tnt/demo.html">
+    <h2>tnt — TNT爆破型 <span class="tag ready">完成</span></h2>
+    <p>実進捗の分だけTNTが土の地形に降り積もり、タップで着火→誘爆チェーン。
+    爆発は地面も掘る採掘ゲーム。自然発火と完了フィナーレで放置しても必ず完走。</p>
+  </a>
+
+  <div class="card">
+    <h2>stack — 積層ビルド <span class="tag idea">構想</span></h2>
+    <p>処理ステップ=レイヤーが積み上がる。CSS 3D transformのみで依存ゼロ・軽量。
+    prototypes/ にReactスケッチあり。</p>
+  </div>
+
+  <div class="card">
+    <h2>orbit — 軌道吸収 <span class="tag idea">構想</span></h2>
+    <p>残タスクの粒子が軌道を周回し、処理されると中心核へ螺旋を描いて吸収される。
+    残量が粒子数で直感的に読める。</p>
+  </div>
+
+  <div class="card">
+    <h2>terrain — 地形生成 <span class="tag idea">構想</span></h2>
+    <p>進捗に応じてワイヤーフレームの山が隆起する。長時間処理の演出向き。</p>
+  </div>
+
+  <div class="card">
+    <h2>voxel — ボクセル組み立て <span class="tag idea">構想</span></h2>
+    <p>成果物(ロゴ等の形状)がブロック単位で組み上がる。形状データ差し替え可能。</p>
+  </div>
+</main>
+</body>
+</html>
