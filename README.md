@@ -30,6 +30,7 @@ npx serve .
 | [water](https://motohasystem.github.io/progress-lab/variants/water/demo.html) — 水位型 | ✅ 完成 | 粒子物理(Matter.js)で水滴が注がれ、水位=進捗。端末の傾きで水面が揺れ、手描きの障害物で水滴の流路を作って遊べる。 |
 | [tnt](https://motohasystem.github.io/progress-lab/variants/tnt/demo.html) — TNT爆破型 | ✅ 完成 | 実進捗の分だけTNTが土の地形に降り積もり、タップで着火→誘爆チェーン。爆発が地面も掘る採掘ゲーム。 |
 | [breakout](https://motohasystem.github.io/progress-lab/variants/breakout/demo.html) — ブロック崩し型 | ✅ 完成 | 実進捗が進むほどボールが中央から上へ投入される。パドルで跳ね返し、硬さ(HP)のあるブロックを崩す。破壊確定を実進捗で頭打ち＝表示は実進捗に正直。依存ゼロ。 |
+| [gourd](https://motohasystem.github.io/progress-lab/variants/gourd/demo.html) — ひょうたん型 | ✅ 完成 | 実進捗の分だけ鉢からひょうたんのつるが上へ伸び、要所に実が生る。実が割れると小判・達磨・富士・宝珠などのお宝が飛び出し、かごを掲げた子で受け止めて加点。全部キャッチで PERFECT! 依存ゼロ(canvasのみ)。 |
 | stack — 積層ビルド | 💡 構想 | 処理ステップ=レイヤーが積み上がる。CSS 3D transform のみで依存ゼロ。 |
 | orbit — 軌道吸収 | 💡 構想 | 残タスクの粒子が軌道を周回し、処理されると中心核へ螺旋を描いて吸収される。 |
 | terrain — 地形生成 | 💡 構想 | 進捗に応じてワイヤーフレームの山が隆起する。長時間処理向き。 |
@@ -69,7 +70,8 @@ npx serve .
 ### テキスト表示 — `steps` と `note`
 
 数字の進捗だけでなく「xxxをしています…」のような文字も出せる。
-完成バリエーション(water / tnt)は画面**左上**に2種類のテキストを表示する。
+完成バリエーション(water / tnt)は画面**左上**に2種類のテキストを表示する
+(breakout / gourd は対応状況が異なる)。
 
 ```js
 // steps: 進捗に応じて自動で切り替わるステップ名(value から逆引き)
@@ -109,8 +111,12 @@ progress-lab/
 │  │  ├─ tnt-progress.js
 │  │  ├─ demo.html
 │  │  └─ README.md
-│  └─ breakout/            ブロック崩し型(完成・依存ゼロ)
-│     ├─ breakout-progress.js
+│  ├─ breakout/            ブロック崩し型(完成・依存ゼロ)
+│  │  ├─ breakout-progress.js
+│  │  ├─ demo.html
+│  │  └─ README.md
+│  └─ gourd/               ひょうたん型(完成・依存ゼロ)
+│     ├─ gourd-progress.js
 │     ├─ demo.html
 │     └─ README.md
 └─ prototypes/
@@ -121,4 +127,5 @@ progress-lab/
 
 - `water` / `tnt` は物理エンジン [Matter.js](https://brm.io/matter-js/) を使う
   (未ロードなら cdnjs から自動取得。バンドルする場合は事前に `window.Matter` を用意)。
+- `breakout` / `gourd` は依存ゼロ(物理・描画とも自前、canvas のみ)。
 - ビルドツール不要。ブラウザネイティブの ES Modules で動く。
