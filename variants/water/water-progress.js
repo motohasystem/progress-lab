@@ -20,7 +20,8 @@
  *   duration     demoモードの所要ms (default 16000)
  *   drop-gain    1粒あたりの進捗% (default 0.09)
  *   flush-delay  完了後の強制着水までの猶予ms (default 3000)
- *   duck         指定すると水面にアヒルを1匹浮かべる
+ *   duck         指定すると水面にアヒルを1匹浮かべる。
+ *                完了(100%)時は画面端で待つ親アヒルへ泳いでいって出会う
  *
  * プロパティ/メソッド:
  *   .value / .landedValue / .tilt / .duck
@@ -175,7 +176,7 @@ class WaterProgress extends ProgressBase {
   #sh = new Float32Array(N);
   #sv = new Float32Array(N);
   #bubbles = [];
-  #duck = null;          // { x, vx, phase, init } — 水面に浮かぶアヒル(任意)
+  #duck = null;          // 水面に浮かぶアヒル(任意)。完了時は親アヒルへ泳いで出会う
 
   #raf = 0;
   #last = 0;
@@ -261,12 +262,17 @@ class WaterProgress extends ProgressBase {
     this.#tilt = clamp(Number(deg) || 0, -35, 35);
   }
 
-  /** 水面に浮かぶアヒルの表示。true で1匹浮かべる */
+  /** 水面に浮かぶアヒルの表示。true で1匹浮かべ、完了時は親アヒルへ泳いで出会う */
   get duck() {
     return !!this.#duck;
   }
   set duck(on) {
-    if (on) this.#duck ??= { x: 0, vx: 0, phase: 0, init: false };
+    if (on)
+      this.#duck ??= {
+        x: 0, vx: 0, phase: 0, init: false,
+        meeting: false, met: false, meetT: 0, metPhase: 0,
+        parentX: 0, parentSize: 0,
+      };
     else this.#duck = null;
   }
 
@@ -281,7 +287,12 @@ class WaterProgress extends ProgressBase {
     this.#sh.fill(0);
     this.#sv.fill(0);
     this.#bubbles = [];
-    if (this.#duck) this.#duck.init = false; // 水位リセットに合わせて底へ戻す
+    if (this.#duck) {
+      // 水位リセットに合わせて初期位置へ戻し、フィナーレ演出も解除する
+      Object.assign(this.#duck, {
+        init: false, meeting: false, met: false, meetT: 0, metPhase: 0,
+      });
+    }
     this.resetCompleted();
   }
 
@@ -606,16 +617,38 @@ class WaterProgress extends ProgressBase {
       return b.y > surfY(b.x) + this.#sh[idx] + 2;
     });
 
-    // ---- アヒル(水面に浮かべる): 傾きで低い側へ漂い、波で上下する
+    // ---- アヒル(水面に浮かべる)
+    //   通常: 傾きで低い側へ漂い、波で上下する
+    //   完了時: 画面端で待つ親アヒルへ泳いでいって出会う(フィナーレ)
     if (this.#duck) {
       const d = this.#duck;
-      if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
-      const half = clamp(vw * 0.13, 30, 52) * 0.5;
-      d.vx += Math.sin(tiltRad) * 0.22 * dt;  // 重力のx成分で低い側へ
-      d.vx *= Math.pow(0.9, dt);              // 水の抵抗
-      d.x += d.vx * dt;
-      if (d.x < vx + half + 4) { d.x = vx + half + 4; d.vx = Math.abs(d.vx) * 0.3; }
-      else if (d.x > vx + vw - half - 4) { d.x = vx + vw - half - 4; d.vx = -Math.abs(d.vx) * 0.3; }
+      const size = clamp(vw * 0.13, 30, 52);
+      const half = size * 0.5;
+
+      if (this.#landed >= 100) {
+        // フィナーレ: 右端に親アヒルが現れ、子アヒルがそこへ泳いで並ぶ
+        if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
+        d.meeting = true;
+        d.meetT += dt;                                   // 経過(親のフェードイン/演出用)
+        d.parentSize = size * 1.45;
+        d.parentX = vx + vw - d.parentSize * 0.5 - 4;
+        const target = d.parentX - d.parentSize * 0.5 - half * 0.8;
+        const dx = target - d.x;
+        d.vx += dx * 0.0045 * dt;                        // 親へ向かう緩やかな推進
+        d.vx *= Math.pow(0.86, dt);                      // 水の抵抗
+        d.x += d.vx * dt;
+        if (!d.met && Math.abs(dx) < 2.5 && Math.abs(d.vx) < 0.2) d.met = true;
+        if (d.met) d.metPhase += 0.11 * dt;              // 出会えた喜びのバウンド
+      } else {
+        // 通常の漂い。完了から巻き戻った場合はフィナーレ状態も解除
+        if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
+        d.meeting = false; d.met = false; d.meetT = 0; d.metPhase = 0;
+        d.vx += Math.sin(tiltRad) * 0.22 * dt;           // 重力のx成分で低い側へ
+        d.vx *= Math.pow(0.9, dt);                       // 水の抵抗
+        d.x += d.vx * dt;
+        if (d.x < vx + half + 4) { d.x = vx + half + 4; d.vx = Math.abs(d.vx) * 0.3; }
+        else if (d.x > vx + vw - half - 4) { d.x = vx + vw - half - 4; d.vx = -Math.abs(d.vx) * 0.3; }
+      }
       d.phase += 0.06 * dt;
     }
 
@@ -781,22 +814,58 @@ class WaterProgress extends ProgressBase {
     fx.restore();
   }
 
-  /** 水面に乗るアヒルを描く(波の高さ・傾きに追従) */
-  #drawDuck(ctx, vx, vw, surfY) {
-    const d = this.#duck;
-    const s = clamp(vw * 0.13, 30, 52);          // アヒルのサイズ基準
-    const x = clamp(d.x, vx + s * 0.5, vx + vw - s * 0.5);
+  /** ある x 位置での水面の高さと局所的な傾きを返す(波の高さ込み) */
+  #surfAt(x, vx, vw, surfY) {
     const idx = clamp(Math.round(((x - vx) / vw) * (N - 1)), 0, N - 1);
-
-    // 局所的な水面の傾き(全体傾き + 波)に合わせて姿勢を傾ける
     const il = clamp(idx - 2, 0, N - 1), ir = clamp(idx + 2, 0, N - 1);
     const xl = vx + (il / (N - 1)) * vw, xr = vx + (ir / (N - 1)) * vw;
     const yl = surfY(xl) + this.#sh[il], yr = surfY(xr) + this.#sh[ir];
-    const angle = Math.atan2(yr - yl, xr - xl) * 0.85;
-    const surf = surfY(x) + this.#sh[idx];
-    const bob = Math.sin(d.phase) * 1.2;
-    const dir = d.vx < -0.05 ? -1 : 1;           // 進む向きを向く
+    return {
+      surf: surfY(x) + this.#sh[idx],
+      angle: Math.atan2(yr - yl, xr - xl) * 0.85,
+    };
+  }
 
+  /** アヒル(子)と、完了時に現れる親アヒル・出会いの演出を描く */
+  #drawDuck(ctx, vx, vw, surfY) {
+    const d = this.#duck;
+    const s = clamp(vw * 0.13, 30, 52);          // 子アヒルのサイズ基準
+
+    // 完了時: 右端で待つ親アヒル(寄ってくる子を見つめて左を向く)
+    if (d.meeting && d.parentSize > 0) {
+      const ps = d.parentSize;
+      const px = clamp(d.parentX, vx + ps * 0.5, vx + vw - ps * 0.5);
+      const { surf, angle } = this.#surfAt(px, vx, vw, surfY);
+      const fade = clamp(d.meetT / 40, 0, 1);    // ふわっと現れる
+      ctx.globalAlpha = fade;
+      this.#paintDuck(ctx, px, surf, angle, ps, -1, Math.sin(d.phase * 0.8) * 1.1);
+      ctx.globalAlpha = 1;
+    }
+
+    // 子アヒル
+    const x = clamp(d.x, vx + s * 0.5, vx + vw - s * 0.5);
+    const { surf, angle } = this.#surfAt(x, vx, vw, surfY);
+    const bob = Math.sin(d.phase) * 1.2 + (d.met ? Math.abs(Math.sin(d.metPhase)) * 2 : 0);
+    const dir = d.meeting ? 1 : d.vx < -0.05 ? -1 : 1;  // 出会いへ向かう間は親(右)を向く
+    this.#paintDuck(ctx, x, surf, angle, s, dir, bob);
+
+    // 出会えたら二羽の間にハートが立ちのぼる
+    if (d.met) {
+      const ps = d.parentSize;
+      const px = clamp(d.parentX, vx + ps * 0.5, vx + vw - ps * 0.5);
+      const midX = (x + px) / 2;
+      const baseY = Math.min(surf, this.#surfAt(px, vx, vw, surfY).surf) - s * 0.5;
+      for (let i = 0; i < 3; i++) {
+        const t = (d.metPhase * 0.5 + i * 0.66) % 2;        // 0→2 で上昇しながら消える
+        const a = clamp(1 - t / 2, 0, 1) * 0.9;
+        this.#drawHeart(ctx, midX + (i - 1) * s * 0.22, baseY - t * s * 0.7,
+                        s * (0.14 + 0.03 * Math.sin(d.metPhase + i)), a);
+      }
+    }
+  }
+
+  /** アヒル1羽を指定位置・姿勢で描く(子・親で共用) */
+  #paintDuck(ctx, x, surf, angle, s, dir, bob) {
     ctx.save();
     ctx.translate(x, surf - s * 0.18 + bob);
     ctx.rotate(angle);
@@ -849,6 +918,22 @@ class WaterProgress extends ProgressBase {
     ctx.arc(s * 0.40, -s * 0.43, s * 0.045, 0, Math.PI * 2);
     ctx.fill();
 
+    ctx.restore();
+  }
+
+  /** 出会いの演出用ハートを1つ描く */
+  #drawHeart(ctx, x, y, s, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#FF7A9C";
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.3);
+    ctx.bezierCurveTo(x, y, x - s, y, x - s, y + s * 0.35);
+    ctx.bezierCurveTo(x - s, y + s * 0.7, x, y + s * 0.95, x, y + s * 1.1);
+    ctx.bezierCurveTo(x, y + s * 0.95, x + s, y + s * 0.7, x + s, y + s * 0.35);
+    ctx.bezierCurveTo(x + s, y, x, y, x, y + s * 0.3);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 }
