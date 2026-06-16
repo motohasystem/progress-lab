@@ -14,6 +14,7 @@
  *     土は風景であり進捗には計上されない(TNTの消滅だけが進捗)。
  *   - 放置しても各ブロックは3.5〜7秒で自然発火するため、進捗は必ず流れる。
  *   - 完了フィナーレ: value=100 到達の瞬間、残ブロックをすべて即着火して一斉爆発。
+ *     全ブロック破壊後は花火が打ち上がり "Congratulations!" を表示して祝う。
  *
  * 使い方:
  *   <script type="module" src="variants/tnt/tnt-progress.js"></script>
@@ -23,7 +24,7 @@
  * 属性:
  *   value / height / demo("smooth"|"step") / duration
  *   block-gain   1ブロックあたりの進捗% (default 0.625 → 全160個)
- *   dirt-fill    土を積む高さの比率 (default 0.5 = 水槽の半分)
+ *   dirt-fill    土を積む高さの比率 (default 0.9 = 水槽上部の約9割まで)
  *
  * プロパティ:
  *   .value / .detonatedValue
@@ -79,6 +80,8 @@ const DIRT_DESTROY_R = 64;         // 爆発が土を壊す半径
 const BLAST_FORCE = 0.045;
 const PARTICLE_COLORS = ["#FF9B40", "#FFD25F", "#B8B8B8", "#6B5B4E"];
 const DIRT_COLORS = ["#8B5A2B", "#6B4423", "#A9743C"];
+const FIREWORK_COLORS = ["#FFD25F", "#FF7A9C", "#7BE3A8", "#6F8DFF", "#FF9B40", "#C9B6FF", "#FFFFFF"];
+const FW_LAUNCH_INTERVAL = 520;   // 花火の打ち上げ間隔ms
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -103,7 +106,7 @@ class TntProgress extends ProgressBase {
   }
 
   blockGain = 0.625;
-  dirtFill = 0.5;
+  dirtFill = 0.9;
   steps = DEFAULT_STEPS;
   /** 進捗とは独立した任意の一行コメント。"xxxをしています…" 等を即時表示 */
   note = "";
@@ -121,6 +124,12 @@ class TntProgress extends ProgressBase {
   #particles = [];
   #flashes = [];
   #shake = 0;
+
+  // 完了フィナーレ(全ブロック破壊で発動する花火 + Congratulations)
+  #fwRockets = [];   // 打ち上げ中 { x, y, vx, vy, targetY, color }
+  #fwSparks = [];    // 炸裂後の火花 { x, y, vx, vy, life, color }
+  #fwLastLaunch = 0;
+  #celebStart = 0;   // 祝賀開始時刻(0=未開始)。テキストのポップイン演出に使う
 
   #raf = 0;
   #last = 0;
@@ -143,7 +152,7 @@ class TntProgress extends ProgressBase {
     if (this.hasAttribute("block-gain"))
       this.blockGain = parseFloat(this.getAttribute("block-gain")) || this.blockGain;
     if (this.hasAttribute("dirt-fill"))
-      this.dirtFill = clamp(parseFloat(this.getAttribute("dirt-fill")) || this.dirtFill, 0, 0.8);
+      this.dirtFill = clamp(parseFloat(this.getAttribute("dirt-fill")) || this.dirtFill, 0, 0.95);
 
     this.$cv.addEventListener("pointerdown", (e) => this.#onTap(e));
 
@@ -197,6 +206,9 @@ class TntProgress extends ProgressBase {
     this.#clearBlocks();
     this.#particles = [];
     this.#flashes = [];
+    this.#fwRockets = [];
+    this.#fwSparks = [];
+    this.#celebStart = 0;
     this.#buildDirt();
     this.resetCompleted();
   }
@@ -211,7 +223,12 @@ class TntProgress extends ProgressBase {
       this.#detonated = Math.min(this.#detonated, v);
       this.#spawned = v;
       this.#clearBlocks();
-      if (v < 100) this.resetCompleted();
+      if (v < 100) {
+        this.#celebStart = 0;
+        this.#fwRockets = [];
+        this.#fwSparks = [];
+        this.resetCompleted();
+      }
     }
   }
 
@@ -366,6 +383,57 @@ class TntProgress extends ProgressBase {
     this.#blocks.splice(this.#blocks.indexOf(blk), 1);
   }
 
+  // ---- 完了フィナーレ: 花火 ----------------------------------------
+  #launchFirework(vx, vy, vw, vh) {
+    this.#fwRockets.push({
+      x: vx + vw * (0.18 + Math.random() * 0.64),
+      y: vy + vh,                                        // 下端から打ち上げ
+      vx: (Math.random() - 0.5) * 0.8,
+      vy: -(6.5 + Math.random() * 2.2),
+      targetY: vy + vh * (0.1 + Math.random() * 0.3),    // 上部で炸裂
+      color: FIREWORK_COLORS[(Math.random() * FIREWORK_COLORS.length) | 0],
+    });
+  }
+
+  #burstFirework(r, now) {
+    const n = 26 + ((Math.random() * 16) | 0);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.25;
+      const sp = 1.4 + Math.random() * 2.6;
+      this.#fwSparks.push({
+        x: r.x, y: r.y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.8 + Math.random() * 0.5,
+        color: r.color,
+      });
+    }
+    this.#flashes.push({ x: r.x, y: r.y, born: now });   // 炸裂の閃光
+  }
+
+  #updateFireworks(dt, now) {
+    // ロケット: 上昇し、目標高度に達するか失速したら炸裂
+    this.#fwRockets = this.#fwRockets.filter((r) => {
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.vy += 0.09 * dt;                                  // 重力でしだいに減速
+      if (r.y <= r.targetY || r.vy >= 0) {
+        this.#burstFirework(r, now);
+        return false;
+      }
+      return true;
+    });
+    // 火花: 拡散・落下しながら減衰
+    this.#fwSparks = this.#fwSparks.filter((s) => {
+      s.vy += 0.05 * dt;
+      s.vx *= Math.pow(0.96, dt);
+      s.vy *= Math.pow(0.96, dt);
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= 0.012 * dt;
+      return s.life > 0;
+    });
+  }
+
   // ================================================================ main loop
   #loop(now) {
     if (!this.#engine) return;
@@ -434,7 +502,16 @@ class TntProgress extends ProgressBase {
       for (const blk of this.#blocks) this.#ignite(blk, Math.random() * 90);
       if (this.#blocks.length === 0 && this.#detonated > 99.5) this.#detonated = 100;
     }
-    if (this.#detonated >= 100) this.emitComplete();
+    if (this.#detonated >= 100) {
+      this.emitComplete();
+      // ---- 全ブロック破壊の祝賀: 花火を一定間隔で打ち上げ続ける
+      if (!this.#celebStart) this.#celebStart = now;
+      if (now - this.#fwLastLaunch > FW_LAUNCH_INTERVAL) {
+        this.#fwLastLaunch = now;
+        this.#launchFirework(vx, vy, vw, vh);
+      }
+    }
+    this.#updateFireworks(dt, now);
 
     // ---- パーティクル
     this.#particles = this.#particles.filter((p) => {
@@ -481,14 +558,6 @@ class TntProgress extends ProgressBase {
       ctx.fillText(String(m), vx + 16, my + 3);
     }
 
-    // % 数字(実進捗)
-    ctx.font = "600 64px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = this.#detonated >= 100 ? C.good : C.text;
-    ctx.fillText(Math.floor(this.value) + "%", vx + vw / 2, vy + vh / 2);
-    ctx.textBaseline = "alphabetic";
-
     ctx.save();
     ctx.beginPath();
     ctx.roundRect(vx + 1, vy + 1, vw - 2, vh - 2, [3, 3, rr - 1, rr - 1]);
@@ -511,6 +580,14 @@ class TntProgress extends ProgressBase {
         ctx.fillRect(q.x - hs + (sd % 4) * 4, q.y - hs + 3, 3, 3);
       }
     }
+
+    // % 数字(実進捗) — 陸地より手前に重ねる
+    ctx.font = "600 64px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = this.#detonated >= 100 ? C.good : C.text;
+    ctx.fillText(Math.floor(this.value) + "%", vx + vw / 2, vy + vh / 2);
+    ctx.textBaseline = "alphabetic";
 
     // TNTブロック
     for (const blk of this.#blocks) {
@@ -565,6 +642,54 @@ class TntProgress extends ProgressBase {
       ctx.arc(f.x, f.y, r2, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // 花火(完了フィナーレ): 打ち上げロケット + 炸裂火花
+    for (const r of this.#fwRockets) {
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(r.x, r.y);
+      ctx.lineTo(r.x - r.vx * 3, r.y - r.vy * 3);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = r.color;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const s of this.#fwSparks) {
+      ctx.globalAlpha = clamp(s.life, 0, 1);
+      ctx.fillStyle = s.color;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Congratulations(全ブロック破壊の祝賀テキスト)
+    if (this.#celebStart) {
+      const el = (now - this.#celebStart) / 1000;
+      const pop = clamp(el / 0.4, 0, 1);
+      const ease = 1 - Math.pow(1 - pop, 3);             // easeOutCubic でポップイン
+      const scale = (0.6 + 0.4 * ease) * (1 + Math.sin(el * 3) * 0.03);
+      const fs = clamp(vw / 11, 14, 30);
+      ctx.save();
+      ctx.translate(vx + vw / 2, vy + vh * 0.26);
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = pop;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `700 ${fs}px ui-monospace, monospace`;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(20,16,40,.85)";
+      ctx.strokeText("Congratulations!", 0, 0);
+      ctx.fillStyle = C.accent;
+      ctx.fillText("Congratulations!", 0, 0);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
 
     // ラベル類

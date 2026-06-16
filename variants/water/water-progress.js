@@ -21,7 +21,7 @@
  *   drop-gain    1粒あたりの進捗% (default 0.09)
  *   flush-delay  完了後の強制着水までの猶予ms (default 3000)
  *   duck         指定すると水面にアヒルを1匹浮かべる。
- *                完了(100%)時は画面端で待つ親アヒルへ泳いでいって出会う
+ *                完了間際に親アヒルが現れ、水位がちょうど100%に達した瞬間に出会う
  *
  * プロパティ/メソッド:
  *   .value / .landedValue / .tilt / .duck
@@ -262,7 +262,7 @@ class WaterProgress extends ProgressBase {
     this.#tilt = clamp(Number(deg) || 0, -35, 35);
   }
 
-  /** 水面に浮かぶアヒルの表示。true で1匹浮かべ、完了時は親アヒルへ泳いで出会う */
+  /** 水面に浮かぶアヒルの表示。true で1匹浮かべ、100%到達と同時に親アヒルと出会う */
   get duck() {
     return !!this.#duck;
   }
@@ -270,8 +270,8 @@ class WaterProgress extends ProgressBase {
     if (on)
       this.#duck ??= {
         x: 0, vx: 0, phase: 0, init: false,
-        meeting: false, met: false, meetT: 0, metPhase: 0,
-        parentX: 0, parentSize: 0,
+        meeting: false, met: false, meetProg: 0, metPhase: 0,
+        approachFromX: null, parentX: 0, parentSize: 0,
       };
     else this.#duck = null;
   }
@@ -290,7 +290,8 @@ class WaterProgress extends ProgressBase {
     if (this.#duck) {
       // 水位リセットに合わせて初期位置へ戻し、フィナーレ演出も解除する
       Object.assign(this.#duck, {
-        init: false, meeting: false, met: false, meetT: 0, metPhase: 0,
+        init: false, meeting: false, met: false, meetProg: 0,
+        metPhase: 0, approachFromX: null,
       });
     }
     this.resetCompleted();
@@ -619,30 +620,43 @@ class WaterProgress extends ProgressBase {
 
     // ---- アヒル(水面に浮かべる)
     //   通常: 傾きで低い側へ漂い、波で上下する
-    //   完了時: 画面端で待つ親アヒルへ泳いでいって出会う(フィナーレ)
+    //   完了間際: 親アヒルが現れ、子アヒルが接近を始める(フィナーレ)
+    //   水位がちょうど100%に達した瞬間に親と出会うよう、接近量を水位で駆動する
     if (this.#duck) {
       const d = this.#duck;
       const size = clamp(vw * 0.13, 30, 52);
       const half = size * 0.5;
 
-      if (this.#landed >= 100) {
-        // フィナーレ: 右端に親アヒルが現れ、子アヒルがそこへ泳いで並ぶ
-        if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
+      // 親アヒルの待機位置(右端)と、子が並ぶ目標位置
+      d.parentSize = size * 1.45;
+      d.parentX = vx + vw - d.parentSize * 0.5 - 4;
+      const target = d.parentX - d.parentSize * 0.5 - half * 0.8;
+
+      // 接近の進み具合: APPROACH_START%で0、100%で1。
+      // 水位(#landed)で駆動するので、100%到達と同時に target へ着く。
+      const APPROACH_START = 80;
+      const prog = clamp(
+        (this.#landed - APPROACH_START) / (100 - APPROACH_START), 0, 1
+      );
+
+      if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
+
+      if (prog > 0) {
+        // フィナーレ: 親が現れ、子が水位の上昇に合わせて親へ寄っていく
         d.meeting = true;
-        d.meetT += dt;                                   // 経過(親のフェードイン/演出用)
-        d.parentSize = size * 1.45;
-        d.parentX = vx + vw - d.parentSize * 0.5 - 4;
-        const target = d.parentX - d.parentSize * 0.5 - half * 0.8;
-        const dx = target - d.x;
-        d.vx += dx * 0.0045 * dt;                        // 親へ向かう緩やかな推進
-        d.vx *= Math.pow(0.86, dt);                      // 水の抵抗
-        d.x += d.vx * dt;
-        if (!d.met && Math.abs(dx) < 2.5 && Math.abs(d.vx) < 0.2) d.met = true;
-        if (d.met) d.metPhase += 0.11 * dt;              // 出会えた喜びのバウンド
+        d.meetProg = prog;                               // 親のフェードイン量に使用
+        if (d.approachFromX == null) d.approachFromX = d.x; // 接近開始位置を固定
+        const eased = prog * prog * (3 - 2 * prog);      // smoothstep でなめらかに
+        d.x = d.approachFromX + (target - d.approachFromX) * eased;
+        if (this.#landed >= 100) {                       // 100%到達 = 出会いの瞬間
+          d.x = target;
+          d.met = true;
+          d.metPhase += 0.11 * dt;                       // 出会えた喜びのバウンド
+        }
       } else {
         // 通常の漂い。完了から巻き戻った場合はフィナーレ状態も解除
-        if (!d.init) { d.x = cx; d.vx = 0; d.init = true; }
-        d.meeting = false; d.met = false; d.meetT = 0; d.metPhase = 0;
+        d.meeting = false; d.met = false; d.meetProg = 0;
+        d.metPhase = 0; d.approachFromX = null;
         d.vx += Math.sin(tiltRad) * 0.22 * dt;           // 重力のx成分で低い側へ
         d.vx *= Math.pow(0.9, dt);                       // 水の抵抗
         d.x += d.vx * dt;
@@ -836,7 +850,7 @@ class WaterProgress extends ProgressBase {
       const ps = d.parentSize;
       const px = clamp(d.parentX, vx + ps * 0.5, vx + vw - ps * 0.5);
       const { surf, angle } = this.#surfAt(px, vx, vw, surfY);
-      const fade = clamp(d.meetT / 40, 0, 1);    // ふわっと現れる
+      const fade = clamp((d.meetProg || 0) * 1.6, 0, 1); // 接近に合わせ早めに現れる
       ctx.globalAlpha = fade;
       this.#paintDuck(ctx, px, surf, angle, ps, -1, Math.sin(d.phase * 0.8) * 1.1);
       ctx.globalAlpha = 1;
