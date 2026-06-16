@@ -36,17 +36,18 @@
 <main>
   <div class="eyebrow">PROGRESS LAB / GOURD</div>
   <h1>&lt;gourd-progress&gt; デモ</h1>
-  <p>本番では <code>gp.value = 実進捗</code> を流し込むだけ。つるが伸びて生った
-  <b>ひょうたんの実をクリック</b>すると、ぱかっと割れて中からめでたいものが出てきます。</p>
+  <p>本番では <code>gp.value = 実進捗</code> を流し込むだけ。つるに生ったひょうたんが
+  割れて<b>お宝が落ちてくる</b>ので、<b>カーソルを左右に動かしてキャラ</b>で受け止めよう。
+  お宝は50〜500点(300以上キラキラ・500ギラギラ)。全部取れたら PERFECT!</p>
 
   <gourd-progress id="gp" demo="smooth" duration="16000"></gourd-progress>
 
   <div class="bar">
     <button id="play" class="primary">リセットして再生</button>
     <button id="src">進捗: なめらか</button>
-    <button id="open">ぜんぶ割る</button>
+    <button id="open">ぜんぶ落とす</button>
     <input type="range" id="slider" min="0" max="100" step="0.1" value="0">
-    <span class="readout" id="readout">実 0% / つる 0%</span>
+    <span class="readout" id="readout">つる 0% / 得点 0</span>
   </div>
 </main>
 
@@ -81,10 +82,11 @@
 
   gp.addEventListener("complete", () => console.log("complete!"));
   gp.addEventListener("gourd-open", (e) => console.log("開封:", e.detail.treasure));
+  gp.addEventListener("perfect", () => console.log("PERFECT!"));
 
   setInterval(() => {
     readout.textContent =
-      `実 ${Math.floor(gp.value)}% / つる ${Math.floor(gp.displayValue)}%`;
+      `つる ${Math.floor(gp.displayValue)}% / 得点 ${gp.score}`;
     if (document.activeElement !== slider) slider.value = gp.value;
   }, 120);
 </script>
