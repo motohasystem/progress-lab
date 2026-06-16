@@ -14,7 +14,8 @@
  *     土は風景であり進捗には計上されない(TNTの消滅だけが進捗)。
  *   - 放置しても各ブロックは3.5〜7秒で自然発火するため、進捗は必ず流れる。
  *   - 完了フィナーレ: value=100 到達の瞬間、残ブロックをすべて即着火して一斉爆発。
- *     全ブロック破壊後は花火が打ち上がり "Congratulations!" を表示して祝う。
+ *     地面(土)ブロックを全部破壊し尽くすと(進捗100%とは無関係)、その間ずっと
+ *     花火が打ち上がり "Congratulations!" を表示して祝う。
  *
  * 使い方:
  *   <script type="module" src="variants/tnt/tnt-progress.js"></script>
@@ -129,7 +130,8 @@ class TntProgress extends ProgressBase {
   #fwRockets = [];   // 打ち上げ中 { x, y, vx, vy, targetY, color }
   #fwSparks = [];    // 炸裂後の火花 { x, y, vx, vy, life, color }
   #fwLastLaunch = 0;
-  #celebStart = 0;   // 祝賀開始時刻(0=未開始)。テキストのポップイン演出に使う
+  #celebStart = 0;       // 祝賀開始時刻(0=未開始)。テキストのポップイン演出に使う
+  #fieldHadDirt = false; // 一度でも地面(土)が存在したか(土なし設定での誤発動を防ぐ)
 
   #raf = 0;
   #last = 0;
@@ -209,6 +211,7 @@ class TntProgress extends ProgressBase {
     this.#fwRockets = [];
     this.#fwSparks = [];
     this.#celebStart = 0;
+    this.#fieldHadDirt = false;
     this.#buildDirt();
     this.resetCompleted();
   }
@@ -502,14 +505,21 @@ class TntProgress extends ProgressBase {
       for (const blk of this.#blocks) this.#ignite(blk, Math.random() * 90);
       if (this.#blocks.length === 0 && this.#detonated > 99.5) this.#detonated = 100;
     }
-    if (this.#detonated >= 100) {
-      this.emitComplete();
-      // ---- 全ブロック破壊の祝賀: 花火を一定間隔で打ち上げ続ける
-      if (!this.#celebStart) this.#celebStart = now;
+    if (this.#detonated >= 100) this.emitComplete();
+
+    // ---- 祝賀の花火: 唯一の条件は「地面(土)ブロックを全部破壊した(=1つも残っていない)」こと。
+    //      進捗%やTNTの残数とは一切無関係。土なし設定での誤発動を防ぐため、
+    //      一度でも土が存在したこと(#fieldHadDirt)を最小ガードに使う。
+    if (this.#dirt.length > 0) this.#fieldHadDirt = true;
+    const allDirtDestroyed = this.#fieldHadDirt && this.#dirt.length === 0;
+    if (allDirtDestroyed) {
+      if (!this.#celebStart) { this.#celebStart = now; this.#fwLastLaunch = 0; }
       if (now - this.#fwLastLaunch > FW_LAUNCH_INTERVAL) {
         this.#fwLastLaunch = now;
         this.#launchFirework(vx, vy, vw, vh);
       }
+    } else {
+      this.#celebStart = 0;                       // ブロックが残っている間は祝賀しない
     }
     this.#updateFireworks(dt, now);
 
