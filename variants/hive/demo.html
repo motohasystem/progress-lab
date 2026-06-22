@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>hive-progress demo</title>
+<style>
+  body {
+    margin: 0; min-height: 100vh;
+    background: radial-gradient(1200px 600px at 50% -10%, #221C4D, #161330);
+    color: #EDEAFB; font-family: 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 14px 40px;
+  }
+  main { width: 100%; max-width: 560px; }
+  h1 { font-size: 21px; font-weight: 600; margin: 4px 0 4px; }
+  .eyebrow { font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: .25em; color: #FFB454; }
+  p { font-size: 12.5px; color: #8F89BC; line-height: 1.7; margin: 0 0 14px; }
+  .bar {
+    display: flex; align-items: center; gap: 10px; margin-top: 10px;
+    background: #1E1A3D; border: 1px solid #332D63;
+    border-radius: 12px; padding: 10px 14px; flex-wrap: wrap;
+  }
+  button {
+    font-family: inherit; font-size: 12px; cursor: pointer;
+    border-radius: 8px; padding: 7px 12px;
+    background: transparent; border: 1px solid #332D63; color: #8F89BC;
+  }
+  button.primary { background: #FFB454; border: none; color: #2A1B05; font-weight: 600; }
+  input[type=range] { flex: 1; min-width: 80px; accent-color: #FFB454; }
+  .readout { font-family: ui-monospace, monospace; font-size: 12px; min-width: 130px; }
+  code { background: #1E1A3D; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+  .back { display: inline-block; margin-top: 18px; font-size: 12px; color: #8F89BC; text-decoration: none; }
+  .back:hover { color: #FFB454; }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">PROGRESS LAB / HIVE</div>
+  <h1>&lt;hive-progress&gt; デモ</h1>
+  <p>本番では <code>hv.value = 実進捗</code> を流し込むだけ。中央のハチの巣から
+  <b>ミツバチが採蜜に飛び立ち</b>、花や画面の外で蜜を集めて<b>巣に戻ると蜜(%)が進む</b>。
+  表示は実進捗に遅れて追従するが決して超えない正直設計。
+  <b>草むらをクリック</b>すると花が咲く。画面内の花から採蜜すると<b>+100点</b>(花は萎んで消える)、
+  花が尽きるとミツバチは画面の外へ採蜜に行く。スコアは進捗には影響しない。
+  <b>「進捗: 10%刻み」</b>では往復を待たず、ステップごとに蜜面が即座に進む。</p>
+
+  <hive-progress id="hv" demo="smooth" duration="16000"></hive-progress>
+
+  <div class="bar">
+    <button id="play" class="primary">リセットして再生</button>
+    <button id="src">進捗: なめらか</button>
+    <input type="range" id="slider" min="0" max="100" step="0.1" value="0">
+    <span class="readout" id="readout">蜜 0% / 得点 0</span>
+  </div>
+
+  <a class="back" href="../../index.html">← バリエーション一覧へ戻る</a>
+</main>
+
+<script type="module">
+  import "./hive-progress.js";
+
+  const hv = document.getElementById("hv");
+  const play = document.getElementById("play");
+  const src = document.getElementById("src");
+  const slider = document.getElementById("slider");
+  const readout = document.getElementById("readout");
+
+  play.addEventListener("click", () => {
+    hv.reset();
+    if (!hv.hasAttribute("demo")) hv.setAttribute("demo", "smooth");
+  });
+
+  src.addEventListener("click", () => {
+    const next = hv.getAttribute("demo") === "step" ? "smooth" : "step";
+    hv.setAttribute("demo", next);
+    src.textContent = next === "step" ? "進捗: 10%刻み" : "進捗: なめらか";
+  });
+
+  // スライダー操作中は自走を止めて手動制御(本番の使い方と同じ)
+  slider.addEventListener("input", () => {
+    hv.removeAttribute("demo");
+    hv.value = parseFloat(slider.value);
+  });
+
+  hv.addEventListener("complete", () => console.log("complete!"));
+  hv.addEventListener("deposit", (e) => console.log("持ち帰り:", e.detail));
+
+  setInterval(() => {
+    readout.textContent =
+      `蜜 ${Math.floor(hv.displayValue)}% / 得点 ${hv.score}`;
+    if (document.activeElement !== slider) slider.value = hv.value;
+  }, 120);
+</script>
+</body>
+</html>

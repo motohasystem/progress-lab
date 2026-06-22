@@ -31,6 +31,8 @@ npx serve .
 | [tnt](https://motohasystem.github.io/progress-lab/variants/tnt/demo.html) — TNT爆破型 | ✅ 完成 | 実進捗の分だけTNTが土の地形に降り積もり、タップで着火→誘爆チェーン。爆発が地面も掘る採掘ゲーム。 |
 | [breakout](https://motohasystem.github.io/progress-lab/variants/breakout/demo.html) — ブロック崩し型 | ✅ 完成 | 実進捗が進むほどボールが中央から上へ投入される。パドルで跳ね返し、硬さ(HP)のあるブロックを崩す。破壊確定を実進捗で頭打ち＝表示は実進捗に正直。依存ゼロ。 |
 | [gourd](https://motohasystem.github.io/progress-lab/variants/gourd/demo.html) — ひょうたん型 | ✅ 完成 | 実進捗の分だけ鉢からひょうたんのつるが上へ伸び、要所に実が生る。実が割れると小判・達磨・富士・宝珠などのお宝が飛び出し、かごを掲げた子で受け止めて加点。全部キャッチで PERFECT! 依存ゼロ(canvasのみ)。 |
+| [goat](https://motohasystem.github.io/progress-lab/variants/goat/demo.html) — ヤギの草食み | ✅ 完成 | 実進捗の分だけヤギが一面の草むらを端から食べて進む。たまに紫の毒草が生え、食べると具合が悪くなる。毒草をクリック/タップで抜いて守る。体調・毒は演出で進捗には影響しない。依存ゼロ。 |
+| [hive](https://motohasystem.github.io/progress-lab/variants/hive/demo.html) — ミツバチの採蜜 | ✅ 完成 | 中央のハチの巣からミツバチが飛び立ち、花や画面の外で蜜を集めて巣に持ち帰る。帰巣した瞬間にハニカムが下から満ちて%が進む。飛行中のハチが運ぶ蜜は実進捗を超えない正直設計。草むらクリックで花が咲く。依存ゼロ。 |
 | stack — 積層ビルド | 💡 構想 | 処理ステップ=レイヤーが積み上がる。CSS 3D transform のみで依存ゼロ。 |
 | orbit — 軌道吸収 | 💡 構想 | 残タスクの粒子が軌道を周回し、処理されると中心核へ螺旋を描いて吸収される。 |
 | terrain — 地形生成 | 💡 構想 | 進捗に応じてワイヤーフレームの山が隆起する。長時間処理向き。 |
@@ -115,8 +117,16 @@ progress-lab/
 │  │  ├─ breakout-progress.js
 │  │  ├─ demo.html
 │  │  └─ README.md
-│  └─ gourd/               ひょうたん型(完成・依存ゼロ)
-│     ├─ gourd-progress.js
+│  ├─ gourd/               ひょうたん型(完成・依存ゼロ)
+│  │  ├─ gourd-progress.js
+│  │  ├─ demo.html
+│  │  └─ README.md
+│  ├─ goat/                ヤギの草食み(完成・依存ゼロ)
+│  │  ├─ goat-progress.js
+│  │  ├─ demo.html
+│  │  └─ README.md
+│  └─ hive/                ミツバチの採蜜(完成・依存ゼロ)
+│     ├─ hive-progress.js
 │     ├─ demo.html
 │     └─ README.md
 └─ prototypes/
