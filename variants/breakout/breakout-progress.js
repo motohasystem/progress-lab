@@ -11,8 +11,8 @@
  *   - ただし破壊の「確定」は実進捗で頭打ちにする(破壊済み ≤ value 相当)。
  *     HP=0 になっても実進捗が追いつくまでは砕けず、ひび割れたまま留まる。
  *     これにより表示は実進捗を超えない。難易度は「ボール数 × 硬さ」で調整する。
- *   - 放置対策が二重: ① 外したボールは中央から再投入される(進捗を失わない)
- *     ② 完了フラッシュで残ブロックを一斉破壊(フィナーレ)。
+ *   - 放置対策: 完了フラッシュで残ブロックを一斉破壊(フィナーレ)。
+ *     外したボールは再投入されない(取りこぼすと減るが、実進捗の伸びで増える)。
  *   - パドルは「進捗を早める/気持ちよくする」操作。触らなくても必ず完走する。
  *
  * 使い方:
@@ -61,7 +61,6 @@ const PADDLE_H = 11;          // パドル厚px
 const BRICK_GAP = 3;          // ブロック間の隙間px
 const IDEAL_CELL = 34;        // 1ブロックの目標幅px(列数の算出に使う)
 const SPAWN_INTERVAL = 150;   // ボール投入の最小間隔ms(どんどん増える演出)
-const RESPAWN_DELAY = 650;    // 場外に落ちたボールが再投入されるまでのms
 const FLUSH_PER_FRAME = 3;    // 完了フラッシュ時に1フレームで砕く残ブロック数
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -101,7 +100,8 @@ class BreakoutProgress extends ProgressBase {
   #broken = 0;         // 破壊済み数
   #cols = 0;
 
-  #balls = [];         // { x, y, vx, vy, dead, respawnAt }
+  #balls = [];         // { x, y, vx, vy, dead }
+  #spawned = 0;        // これまでに投入した累計ボール数(取りこぼしても減らない)
   #particles = [];     // { x, y, vx, vy, size, color, life }
   #paddleX = 0.5;      // パドル中心の正規化x (0–1)
   #paddleFlash = 0;
@@ -182,6 +182,7 @@ class BreakoutProgress extends ProgressBase {
     this.#broken = 0;
     this.#brokenOrder = [];
     this.#balls = [];
+    this.#spawned = 0;
     this.#particles = [];
     this.#flushAt = 0;
     this.#demoTimer = 0;
@@ -203,6 +204,8 @@ class BreakoutProgress extends ProgressBase {
       // ボールも実進捗相応の数まで間引く
       const target = this.#ballTarget(v);
       if (this.#balls.length > target) this.#balls.length = target;
+      // 累計投入数も巻き戻し、進捗が再び伸びたとき投入し直せるようにする
+      if (this.#spawned > target) this.#spawned = target;
       this.#flushAt = 0;
       if (v < 100) this.resetCompleted();
     }
@@ -288,13 +291,13 @@ class BreakoutProgress extends ProgressBase {
     ball.vx = Math.cos(ang) * BALL_SPEED;
     ball.vy = Math.sin(ang) * BALL_SPEED; // 上向き(負)
     ball.dead = false;
-    ball.respawnAt = 0;
   }
 
   #spawnBall(now) {
     const ball = {};
     this.#launchBall(ball);
     this.#balls.push(ball);
+    this.#spawned++;
     this.#lastSpawn = now;
   }
 
@@ -343,8 +346,9 @@ class BreakoutProgress extends ProgressBase {
 
     // ---- ボール投入: 実進捗に応じた数まで、間隔を空けて増やす
     //      完了(表示100%)後は新規投入を止め、飛んでいる球が落ちきって自然に消える
+    //      取りこぼしたボールは再投入しないため、累計投入数で頭打ちにする
     const target = this.#ballTarget(this.value);
-    if (this.#cleared < 100 && this.#balls.length < target &&
+    if (this.#cleared < 100 && this.#spawned < target &&
         now - this.#lastSpawn > SPAWN_INTERVAL) {
       this.#spawnBall(now);
     }
@@ -358,10 +362,6 @@ class BreakoutProgress extends ProgressBase {
 
     // ---- ボール更新(トンネリング防止のためサブステップで進める)
     for (const ball of this.#balls) {
-      if (ball.dead) {
-        if (now >= ball.respawnAt && this.#cleared < 100) this.#launchBall(ball);
-        continue;
-      }
       const moveLen = Math.hypot(ball.vx, ball.vy) * dt;
       const steps = Math.max(1, Math.ceil(moveLen / (BALL_R * 1.6)));
       const sdt = dt / steps;
@@ -389,13 +389,16 @@ class BreakoutProgress extends ProgressBase {
         // ブロック(当たれば必ず反射。HPを削るだけで、破壊確定は下の予算判定で)
         this.#collideBricks(ball, now);
 
-        // 場外(下) → 再投入待ちに
+        // 場外(下) → 取りこぼし。再投入せず取り除く
         if (ball.y - BALL_R > vy + vh) {
           ball.dead = true;
-          ball.respawnAt = now + RESPAWN_DELAY;
           break;
         }
       }
+    }
+    // 取りこぼしたボールを除去(再投入はしない)
+    if (this.#balls.some((b) => b.dead)) {
+      this.#balls = this.#balls.filter((b) => !b.dead);
     }
 
     // ---- 破壊確定: HP0のブロックを実進捗の許す範囲だけ砕く(表示 ≤ value)
